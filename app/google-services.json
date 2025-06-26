@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "913736614672",
+    "project_id": "travelguide-6fcb3",
+    "storage_bucket": "travelguide-6fcb3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:913736614672:android:1ed9375927bca1e92fdb95",
+        "android_client_info": {
+          "package_name": "com.nikita.travelguide"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA0mOhLI24wy3NRaiRiY4n5PEagHyO7Btk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
