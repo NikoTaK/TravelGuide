@@ -43,6 +43,8 @@ import com.nikita.travelguide.storage.FavoritePoi
 import com.nikita.travelguide.storage.RecentSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.nikita.travelguide.ui.screens.AppEntry
+import com.nikita.travelguide.ui.screens.HomeScreen
 
 sealed interface UiState {
     object Idle : UiState
@@ -142,7 +144,7 @@ fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
     ) { innerPadding ->
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (selectedScreen) {
-                is BottomNavScreen.Home -> HomeWithRecentSearches(
+                is BottomNavScreen.Home -> HomeScreen(
                     city = city,
                     onCityChange = { city = it },
                     recentSearches = recentSearches,
