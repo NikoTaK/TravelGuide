@@ -37,6 +37,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
+import androidx.room.Room
+import com.nikita.travelguide.storage.TravelGuideDatabase
+import com.nikita.travelguide.storage.FavoritePoi
+import com.nikita.travelguide.storage.RecentSearch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 sealed interface UiState {
     object Idle : UiState
@@ -87,20 +93,33 @@ sealed class BottomNavScreen(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun MainScreen(apiKey: String) {
+fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
     var selectedScreen by remember { mutableStateOf<BottomNavScreen>(BottomNavScreen.Home) }
     var city by remember { mutableStateOf("Paris") }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
-    var favorites by remember { mutableStateOf(listOf<FavoritePOI>()) }
+    var favorites by remember { mutableStateOf(listOf<FavoritePoi>()) }
     val vm: GuideVM = androidx.lifecycle.viewmodel.compose.viewModel()
     var triggerSearch by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Load favorites and recent searches from DB on start
+    LaunchedEffect(Unit) {
+        favorites = withContext(Dispatchers.IO) { db.favoritePoiDao().getAll() }
+        recentSearches = withContext(Dispatchers.IO) { db.recentSearchDao().getAll().map { it.searchTerm } }
+    }
 
     // When triggerSearch is set, perform the search and add to recent
     LaunchedEffect(triggerSearch) {
         if (triggerSearch) {
             vm.fetch(city, apiKey)
             if (city.isNotBlank() && !recentSearches.contains(city)) {
-                recentSearches = (listOf(city) + recentSearches).take(10)
+                // Add to DB and state
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        db.recentSearchDao().insert(RecentSearch(searchTerm = city, timestamp = System.currentTimeMillis()))
+                        recentSearches = db.recentSearchDao().getAll().map { it.searchTerm }
+                    }
+                }
             }
             triggerSearch = false
         }
@@ -136,11 +155,18 @@ fun MainScreen(apiKey: String) {
                     apiKey = apiKey,
                     favorites = favorites,
                     onToggleFavorite = { poi ->
-                        val fav = FavoritePOI(poi.properties.name, poi.geometry.coordinates.getOrNull(1), poi.geometry.coordinates.getOrNull(0), city)
-                        favorites = if (favorites.any { it == fav }) {
-                            favorites.filterNot { it == fav }
-                        } else {
-                            favorites + fav
+                        val fav = FavoritePoi(name = poi.properties.name, lat = poi.geometry.coordinates.getOrNull(1), lon = poi.geometry.coordinates.getOrNull(0), city = city)
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                val dao = db.favoritePoiDao()
+                                val exists = dao.getAll().any { it == fav }
+                                if (exists) {
+                                    dao.delete(fav)
+                                } else {
+                                    dao.insert(fav)
+                                }
+                                favorites = dao.getAll()
+                            }
                         }
                     }
                 )
@@ -151,8 +177,6 @@ fun MainScreen(apiKey: String) {
     }
 }
 
-data class FavoritePOI(val name: String?, val lat: Double?, val lon: Double?, val city: String?)
-
 @Composable
 fun HomeWithRecentSearches(
     city: String,
@@ -162,7 +186,7 @@ fun HomeWithRecentSearches(
     onSearch: () -> Unit,
     vm: GuideVM,
     apiKey: String,
-    favorites: List<FavoritePOI>,
+    favorites: List<FavoritePoi>,
     onToggleFavorite: (com.nikita.travelguide.network.PoiFeature) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -201,7 +225,7 @@ fun HomeWithRecentSearches(
 @Composable
 fun POIListWithFavorites(
     pois: List<com.nikita.travelguide.network.PoiFeature>,
-    favorites: List<FavoritePOI>,
+    favorites: List<FavoritePoi>,
     onToggleFavorite: (com.nikita.travelguide.network.PoiFeature) -> Unit
 ) {
     val expandedIndex = remember { mutableStateOf(-1) }
@@ -253,7 +277,7 @@ fun POIListWithFavorites(
 }
 
 @Composable
-fun FavoritesPage(favorites: List<FavoritePOI>) {
+fun FavoritesPage(favorites: List<FavoritePoi>) {
     if (favorites.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No favorites yet.")
@@ -379,7 +403,7 @@ fun SignInScreen(onSignInSuccess: (FirebaseUser) -> Unit) {
 }
 
 @Composable
-fun AppEntry(apiKey: String) {
+fun AppEntry(apiKey: String, db: TravelGuideDatabase) {
     var user by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser) }
     DisposableEffect(Unit) {
         val auth = FirebaseAuth.getInstance()
@@ -394,13 +418,18 @@ fun AppEntry(apiKey: String) {
     if (user == null) {
         SignInScreen(onSignInSuccess = { user = it })
     } else {
-        MainScreen(apiKey)
+        MainScreen(apiKey, db)
     }
 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { AppEntry(GEOAPIFY_KEY) } }
+        val db = Room.databaseBuilder(
+            applicationContext,
+            TravelGuideDatabase::class.java,
+            "travel_guide_db"
+        ).build()
+        setContent { MaterialTheme { AppEntry(GEOAPIFY_KEY, db) } }
     }
 }

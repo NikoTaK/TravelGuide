@@ -17,7 +17,5 @@ interface FavoritePoiDao {
     @Query("SELECT * FROM favorite_poi")
     suspend fun getAll(): List<FavoritePoi>
 
-    @Query("SELECT * FROM favorite_poi WHERE placeId = :placeId LIMIT 1")
-    suspend fun getByPlaceId(placeId: String): FavoritePoi?
 }
  

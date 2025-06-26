@@ -9,5 +9,5 @@ data class FavoritePoi(
     val name: String?,
     val lat: Double?,
     val lon: Double?,
-    val placeId: String?
+    val city: String?
 )
