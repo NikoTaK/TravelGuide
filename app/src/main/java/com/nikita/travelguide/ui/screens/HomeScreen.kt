@@ -22,8 +22,6 @@ import com.nikita.travelguide.UiState
 import com.nikita.travelguide.GuideVM
 import com.nikita.travelguide.network.GEOAPIFY_KEY
 import com.nikita.travelguide.storage.FavoritePoi
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardActions
 
 @Composable
 fun HomeScreen(
@@ -55,9 +53,7 @@ fun HomeScreen(
                 },
                 singleLine = true,
                 shape = MaterialTheme.shapes.large,
-                modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { onSearch() })
+                modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
             Button(onClick = onSearch, enabled = apiKey.isNotEmpty() && city.isNotBlank()) {

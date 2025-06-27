@@ -45,6 +45,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.nikita.travelguide.ui.screens.AppEntry
 import com.nikita.travelguide.ui.screens.HomeScreen
+import com.nikita.travelguide.ui.screens.FavoritesScreen
+import com.nikita.travelguide.ui.screens.AccountScreen
+import com.nikita.travelguide.ui.theme.TravelGuideTheme
+import android.os.Build
+import androidx.compose.foundation.background
+import androidx.core.view.WindowCompat
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.graphics.toArgb
+import android.graphics.Color as AndroidColor
 
 sealed interface UiState {
     object Idle : UiState
@@ -129,20 +138,33 @@ fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                val items = listOf(BottomNavScreen.Home, BottomNavScreen.Favorites, BottomNavScreen.Account)
-                items.forEach { screen ->
-                    NavigationBarItem(
-                        selected = selectedScreen == screen,
-                        onClick = { selectedScreen = screen },
-                        icon = { Icon(screen.icon, contentDescription = screen.label) },
-                        label = { Text(screen.label) }
-                    )
+            Column {
+                Divider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    val items = listOf(BottomNavScreen.Home, BottomNavScreen.Favorites, BottomNavScreen.Account)
+                    items.forEach { screen ->
+                        NavigationBarItem(
+                            selected = selectedScreen == screen,
+                            onClick = { selectedScreen = screen },
+                            icon = { Icon(screen.icon, contentDescription = screen.label) },
+                            label = { Text(screen.label) }
+                        )
+                    }
                 }
             }
         }
     ) { innerPadding ->
-        Box(Modifier.padding(innerPadding).fillMaxSize()) {
+        Box(
+            Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
             when (selectedScreen) {
                 is BottomNavScreen.Home -> HomeScreen(
                     city = city,
@@ -172,8 +194,23 @@ fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
                         }
                     }
                 )
-                is BottomNavScreen.Favorites -> FavoritesPage(favorites)
-                is BottomNavScreen.Account -> AccountPage()
+                is BottomNavScreen.Favorites -> FavoritesScreen(
+                    favorites = favorites,
+                    onRemoveFavorite = { fav ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                db.favoritePoiDao().delete(fav)
+                                favorites = db.favoritePoiDao().getAll()
+                            }
+                        }
+                    }
+                )
+                is BottomNavScreen.Account -> AccountScreen(
+                    userEmail = null,
+                    isDarkTheme = false,
+                    onToggleTheme = {},
+                    onSignOut = { FirebaseAuth.getInstance().signOut() }
+                )
             }
         }
     }
@@ -432,6 +469,146 @@ class MainActivity : ComponentActivity() {
             TravelGuideDatabase::class.java,
             "travel_guide_db"
         ).build()
-        setContent { MaterialTheme { AppEntry(GEOAPIFY_KEY, db) } }
+        setContent {
+            var isDarkTheme by remember { mutableStateOf(false) }
+            TravelGuideTheme(darkTheme = isDarkTheme) {
+                AppEntryWithTheme(GEOAPIFY_KEY, db, isDarkTheme, onToggleTheme = { isDarkTheme = !isDarkTheme })
+            }
+        }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.navigationBarColor = AndroidColor.TRANSPARENT
+        }
+    }
+}
+
+@Composable
+fun AppEntryWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
+    var user by remember { mutableStateOf(FirebaseAuth.getInstance().currentUser) }
+    DisposableEffect(Unit) {
+        val auth = FirebaseAuth.getInstance()
+        val listener = FirebaseAuth.AuthStateListener { authInstance ->
+            user = authInstance.currentUser
+        }
+        auth.addAuthStateListener(listener)
+        onDispose { auth.removeAuthStateListener(listener) }
+    }
+    if (user == null) {
+        com.nikita.travelguide.ui.screens.SignInScreen(onSignInSuccess = { user = it })
+    } else {
+        MainScreenWithTheme(apiKey, db, isDarkTheme, onToggleTheme, user?.email)
+    }
+}
+
+@Composable
+fun MainScreenWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Boolean, onToggleTheme: () -> Unit, userEmail: String?) {
+    var selectedScreen by remember { mutableStateOf<BottomNavScreen>(BottomNavScreen.Home) }
+    var city by remember { mutableStateOf("Paris") }
+    var recentSearches by remember { mutableStateOf(listOf<String>()) }
+    var favorites by remember { mutableStateOf(listOf<FavoritePoi>()) }
+    val vm: GuideVM = androidx.lifecycle.viewmodel.compose.viewModel()
+    var triggerSearch by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Load favorites and recent searches from DB on start
+    LaunchedEffect(Unit) {
+        favorites = withContext(Dispatchers.IO) { db.favoritePoiDao().getAll() }
+        recentSearches = withContext(Dispatchers.IO) { db.recentSearchDao().getAll().map { it.searchTerm } }
+    }
+
+    // When triggerSearch is set, perform the search and add to recent
+    LaunchedEffect(triggerSearch) {
+        if (triggerSearch) {
+            vm.fetch(city, apiKey)
+            if (city.isNotBlank() && !recentSearches.contains(city)) {
+                // Add to DB and state
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        db.recentSearchDao().insert(RecentSearch(searchTerm = city, timestamp = System.currentTimeMillis()))
+                        recentSearches = db.recentSearchDao().getAll().map { it.searchTerm }
+                    }
+                }
+            }
+            triggerSearch = false
+        }
+    }
+
+    Scaffold(
+        bottomBar = {
+            Column {
+                Divider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ) {
+                    val items = listOf(BottomNavScreen.Home, BottomNavScreen.Favorites, BottomNavScreen.Account)
+                    items.forEach { screen ->
+                        NavigationBarItem(
+                            selected = selectedScreen == screen,
+                            onClick = { selectedScreen = screen },
+                            icon = { Icon(screen.icon, contentDescription = screen.label) },
+                            label = { Text(screen.label) }
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+        ) {
+            when (selectedScreen) {
+                is BottomNavScreen.Home -> HomeScreen(
+                    city = city,
+                    onCityChange = { city = it },
+                    recentSearches = recentSearches,
+                    onRecentSearch = { search ->
+                        city = search
+                        triggerSearch = true
+                    },
+                    onSearch = { triggerSearch = true },
+                    vm = vm,
+                    apiKey = apiKey,
+                    favorites = favorites,
+                    onToggleFavorite = { poi ->
+                        val fav = FavoritePoi(name = poi.properties.name, lat = poi.geometry.coordinates.getOrNull(1), lon = poi.geometry.coordinates.getOrNull(0), city = city)
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                val dao = db.favoritePoiDao()
+                                val exists = dao.getAll().any { it == fav }
+                                if (exists) {
+                                    dao.delete(fav)
+                                } else {
+                                    dao.insert(fav)
+                                }
+                                favorites = dao.getAll()
+                            }
+                        }
+                    }
+                )
+                is BottomNavScreen.Favorites -> FavoritesScreen(
+                    favorites = favorites,
+                    onRemoveFavorite = { fav ->
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                db.favoritePoiDao().delete(fav)
+                                favorites = db.favoritePoiDao().getAll()
+                            }
+                        }
+                    }
+                )
+                is BottomNavScreen.Account -> AccountScreen(
+                    userEmail = userEmail,
+                    isDarkTheme = isDarkTheme,
+                    onToggleTheme = onToggleTheme,
+                    onSignOut = { FirebaseAuth.getInstance().signOut() }
+                )
+            }
+        }
     }
 }
