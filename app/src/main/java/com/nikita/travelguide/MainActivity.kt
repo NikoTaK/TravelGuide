@@ -38,6 +38,17 @@ import com.nikita.travelguide.ui.theme.TravelGuideTheme
 import androidx.compose.foundation.background
 import androidx.core.view.WindowCompat
 import android.graphics.Color as AndroidColor
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Location
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import androidx.activity.compose.LocalActivity
+import androidx.core.app.ActivityCompat
 
 sealed interface UiState {
     object Idle : UiState
@@ -90,13 +101,14 @@ sealed class BottomNavScreen(val label: String, val icon: ImageVector) {
 @Composable
 fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
     var selectedScreen by remember { mutableStateOf<BottomNavScreen>(BottomNavScreen.Home) }
-    var city by remember { mutableStateOf("Paris") }
+    var city by remember { mutableStateOf("") }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
     var favorites by remember { mutableStateOf(listOf<FavoritePoi>()) }
     val vm: GuideVM = androidx.lifecycle.viewmodel.compose.viewModel()
     var triggerSearch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var isDarkTheme by remember { mutableStateOf(false) }
+    val activity = LocalActivity.current as? MainActivity
 
     // Load favorites and recent searches from DB on start
     LaunchedEffect(Unit) {
@@ -178,7 +190,22 @@ fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
                             }
                         }
                     },
-                    darkTheme = isDarkTheme
+                    darkTheme = isDarkTheme,
+                    onUseCurrentLocation = {
+                        scope.launch {
+                            activity?.let {
+                                it.ensureLocationPermission()
+                                val location = it.getCurrentLocation()
+                                if (location != null) {
+                                    val cityName = it.getCityNameFromLocation(location.latitude, location.longitude, apiKey)
+                                    if (!cityName.isNullOrBlank()) {
+                                        city = cityName
+                                        triggerSearch = true
+                                    }
+                                }
+                            }
+                        }
+                    }
                 )
                 is BottomNavScreen.Favorites -> FavoritesScreen(
                     favorites = favorites,
@@ -204,8 +231,11 @@ fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         val db = Room.databaseBuilder(
             applicationContext,
             TravelGuideDatabase::class.java,
@@ -219,6 +249,39 @@ class MainActivity : ComponentActivity() {
         }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AndroidColor.TRANSPARENT
+    }
+
+    fun ensureLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                1001
+            )
+        }
+    }
+
+    // Helper to get last known location (with permission check)
+    suspend fun getCurrentLocation(): Location? = suspendCancellableCoroutine { cont ->
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            cont.resume(null)
+            return@suspendCancellableCoroutine
+        }
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            cont.resume(location)
+        }.addOnFailureListener { e ->
+            cont.resumeWithException(e)
+        }
+    }
+
+    // Helper to reverse geocode lat/lon to city name using Geoapify
+    suspend fun getCityNameFromLocation(lat: Double, lon: Double, apiKey: String): String? {
+        return try {
+            val results = com.nikita.travelguide.network.Network.api.geocode("$lat,$lon", apiKey)
+            results.results?.firstOrNull()?.city
+        } catch (e: Exception) {
+            null
+        }
     }
 }
 
@@ -243,12 +306,13 @@ fun AppEntryWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Bool
 @Composable
 fun MainScreenWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Boolean, onToggleTheme: () -> Unit, userEmail: String?) {
     var selectedScreen by remember { mutableStateOf<BottomNavScreen>(BottomNavScreen.Home) }
-    var city by remember { mutableStateOf("Paris") }
+    var city by remember { mutableStateOf("") }
     var recentSearches by remember { mutableStateOf(listOf<String>()) }
     var favorites by remember { mutableStateOf(listOf<FavoritePoi>()) }
     val vm: GuideVM = androidx.lifecycle.viewmodel.compose.viewModel()
     var triggerSearch by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current as? MainActivity
 
     // Load favorites and recent searches from DB on start
     LaunchedEffect(Unit) {
@@ -330,7 +394,22 @@ fun MainScreenWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Bo
                             }
                         }
                     },
-                    darkTheme = isDarkTheme
+                    darkTheme = isDarkTheme,
+                    onUseCurrentLocation = {
+                        scope.launch {
+                            activity?.let {
+                                it.ensureLocationPermission()
+                                val location = it.getCurrentLocation()
+                                if (location != null) {
+                                    val cityName = it.getCityNameFromLocation(location.latitude, location.longitude, apiKey)
+                                    if (!cityName.isNullOrBlank()) {
+                                        city = cityName
+                                        triggerSearch = true
+                                    }
+                                }
+                            }
+                        }
+                    }
                 )
                 is BottomNavScreen.Favorites -> FavoritesScreen(
                     favorites = favorites,

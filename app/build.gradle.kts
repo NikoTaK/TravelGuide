@@ -85,4 +85,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-text")
 
     implementation(libs.androidx.material3)
+
+    implementation("com.google.android.gms:play-services-location:21.0.1")
 }

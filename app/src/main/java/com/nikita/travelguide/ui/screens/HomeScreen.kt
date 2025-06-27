@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,7 +39,8 @@ fun HomeScreen(
     apiKey: String,
     favorites: List<FavoritePoi>,
     onToggleFavorite: (com.nikita.travelguide.network.PoiFeature) -> Unit,
-    darkTheme: Boolean
+    darkTheme: Boolean,
+    onUseCurrentLocation: (() -> Unit)? = null
 ) {
     GradientBackground(darkTheme = darkTheme) {
         Column(
@@ -55,9 +57,16 @@ fun HomeScreen(
                     onValueChange = onCityChange,
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     trailingIcon = {
-                        if (city.isNotEmpty()) {
-                            IconButton(onClick = { onCityChange("") }) {
-                                Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                        Row {
+                            if (city.isNotEmpty()) {
+                                IconButton(onClick = { onCityChange("") }) {
+                                    Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                                }
+                            }
+                            if (onUseCurrentLocation != null) {
+                                IconButton(onClick = onUseCurrentLocation) {
+                                    Icon(Icons.Filled.MyLocation, contentDescription = "Use current location")
+                                }
                             }
                         }
                     },
@@ -81,20 +90,30 @@ fun HomeScreen(
             }
             if (recentSearches.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
-                Text("Recent Searches", style = MaterialTheme.typography.titleMedium)
-                LazyRow(modifier = Modifier.padding(vertical = 8.dp)) {
-                    items(recentSearches) { search ->
-                        AssistChip(
-                            onClick = { onRecentSearch(search) },
-                            label = { Text(search, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) },
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-                                .height(48.dp)
-                        )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Text("Recent Searches", style = MaterialTheme.typography.titleMedium)
+                    LazyRow(modifier = Modifier.padding(vertical = 8.dp)) {
+                        items(recentSearches) { search ->
+                            AssistChip(
+                                onClick = { onRecentSearch(search) },
+                                label = { Text(search, fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) },
+                                modifier = Modifier
+                                    .padding(end = 12.dp)
+                                    .height(48.dp)
+                            )
+                        }
                     }
+                    Divider(
+                        color = MaterialTheme.colorScheme.outlineVariant, // purple accent
+                        thickness = 2.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
-            Spacer(Modifier.height(16.dp))
             when (val s = vm.state) {
                 UiState.Idle -> Text("Enter a city and tap Search.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

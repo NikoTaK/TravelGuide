@@ -51,7 +51,7 @@ fun SignInScreen(onSignInSuccess: (FirebaseUser) -> Unit, darkTheme: Boolean) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (isRegistering) "Register" else "Sign In",
+                        text = if (isRegistering) "Register" else "Log In",
                         style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
@@ -130,13 +130,13 @@ fun SignInScreen(onSignInSuccess: (FirebaseUser) -> Unit, darkTheme: Boolean) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         if (loading) CircularProgressIndicator(Modifier.size(20.dp))
-                        else Text(if (isRegistering) "Register" else "Sign In")
+                        else Text(if (isRegistering) "Register" else "Log In")
                     }
                     TextButton(
                         onClick = { isRegistering = !isRegistering },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(if (isRegistering) "Already have an account? Sign In" else "Don't have an account? Register")
+                        Text(if (isRegistering) "Already have an account? Log In" else "Don't have an account? Register")
                     }
                     if (error != null) {
                         Spacer(Modifier.height(8.dp))
