@@ -15,9 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -42,7 +40,7 @@ fun HomeScreen(
     darkTheme: Boolean,
     onUseCurrentLocation: (() -> Unit)? = null
 ) {
-    GradientBackground(darkTheme = darkTheme) {
+    MainBackground(darkTheme = darkTheme) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -108,7 +106,7 @@ fun HomeScreen(
                         }
                     }
                     Divider(
-                        color = MaterialTheme.colorScheme.outlineVariant, // purple accent
+                        color = MaterialTheme.colorScheme.outlineVariant,
                         thickness = 2.dp,
                         modifier = Modifier.fillMaxWidth()
                     )

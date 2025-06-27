@@ -46,10 +46,8 @@ class ExampleUnitTest {
             city = city
         )
         val favorites = mutableListOf<com.nikita.travelguide.storage.FavoritePoi>()
-        // Add to favorites
         if (!favorites.contains(fav)) favorites.add(fav)
         assertTrue(favorites.contains(fav))
-        // Remove from favorites
         if (favorites.contains(fav)) favorites.remove(fav)
         assertFalse(favorites.contains(fav))
     }

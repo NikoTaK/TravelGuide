@@ -98,137 +98,6 @@ sealed class BottomNavScreen(val label: String, val icon: ImageVector) {
     object Account : BottomNavScreen("Account", Icons.Filled.Person)
 }
 
-@Composable
-fun MainScreen(apiKey: String, db: TravelGuideDatabase) {
-    var selectedScreen by remember { mutableStateOf<BottomNavScreen>(BottomNavScreen.Home) }
-    var city by remember { mutableStateOf("") }
-    var recentSearches by remember { mutableStateOf(listOf<String>()) }
-    var favorites by remember { mutableStateOf(listOf<FavoritePoi>()) }
-    val vm: GuideVM = androidx.lifecycle.viewmodel.compose.viewModel()
-    var triggerSearch by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    var isDarkTheme by remember { mutableStateOf(false) }
-    val activity = LocalActivity.current as? MainActivity
-
-    // Load favorites and recent searches from DB on start
-    LaunchedEffect(Unit) {
-        favorites = withContext(Dispatchers.IO) { db.favoritePoiDao().getAll() }
-        recentSearches = withContext(Dispatchers.IO) { db.recentSearchDao().getAll().map { it.searchTerm } }
-    }
-
-    // When triggerSearch is set, perform the search and add to recent
-    LaunchedEffect(triggerSearch) {
-        if (triggerSearch) {
-            vm.fetch(city, apiKey)
-            if (city.isNotBlank() && !recentSearches.contains(city)) {
-                // Add to DB and state
-                scope.launch {
-                    withContext(Dispatchers.IO) {
-                        db.recentSearchDao().insert(RecentSearch(searchTerm = city, timestamp = System.currentTimeMillis()))
-                        recentSearches = db.recentSearchDao().getAll().map { it.searchTerm }
-                    }
-                }
-            }
-            triggerSearch = false
-        }
-    }
-
-    Scaffold(
-        bottomBar = {
-            Column {
-                Divider(
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant
-                )
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ) {
-                    val items = listOf(BottomNavScreen.Home, BottomNavScreen.Favorites, BottomNavScreen.Account)
-                    items.forEach { screen ->
-                        NavigationBarItem(
-                            selected = selectedScreen == screen,
-                            onClick = { selectedScreen = screen },
-                            icon = { Icon(screen.icon, contentDescription = screen.label) },
-                            label = { Text(screen.label) }
-                        )
-                    }
-                }
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-        ) {
-            when (selectedScreen) {
-                is BottomNavScreen.Home -> HomeScreen(
-                    city = city,
-                    onCityChange = { city = it },
-                    recentSearches = recentSearches,
-                    onRecentSearch = { search ->
-                        city = search
-                        triggerSearch = true
-                    },
-                    onSearch = { triggerSearch = true },
-                    vm = vm,
-                    apiKey = apiKey,
-                    favorites = favorites,
-                    onToggleFavorite = { poi ->
-                        val fav = FavoritePoi(name = poi.properties.name, lat = poi.geometry.coordinates.getOrNull(1), lon = poi.geometry.coordinates.getOrNull(0), city = city)
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                val dao = db.favoritePoiDao()
-                                val exists = dao.getAll().any { it == fav }
-                                if (exists) {
-                                    dao.delete(fav)
-                                } else {
-                                    dao.insert(fav)
-                                }
-                                favorites = dao.getAll()
-                            }
-                        }
-                    },
-                    darkTheme = isDarkTheme,
-                    onUseCurrentLocation = {
-                        scope.launch {
-                            activity?.let {
-                                it.ensureLocationPermission()
-                                val location = it.getCurrentLocation()
-                                if (location != null) {
-                                    val cityName = it.getCityNameFromLocation(location.latitude, location.longitude, apiKey)
-                                    if (!cityName.isNullOrBlank()) {
-                                        city = cityName
-                                        triggerSearch = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                )
-                is BottomNavScreen.Favorites -> FavoritesScreen(
-                    favorites = favorites,
-                    onRemoveFavorite = { fav ->
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                db.favoritePoiDao().delete(fav)
-                                favorites = db.favoritePoiDao().getAll()
-                            }
-                        }
-                    },
-                    darkTheme = isDarkTheme
-                )
-                is BottomNavScreen.Account -> AccountScreen(
-                    userEmail = null,
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = { isDarkTheme = !isDarkTheme },
-                    onSignOut = { FirebaseAuth.getInstance().signOut() }
-                )
-            }
-        }
-    }
-}
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -236,6 +105,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         val db = Room.databaseBuilder(
             applicationContext,
             TravelGuideDatabase::class.java,
@@ -244,13 +114,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             var isDarkTheme by remember { mutableStateOf(false) }
             TravelGuideTheme(darkTheme = isDarkTheme) {
-                AppEntryWithTheme(GEOAPIFY_KEY, db, isDarkTheme, onToggleTheme = { isDarkTheme = !isDarkTheme })
+                AppEntryWithTheme(
+                    GEOAPIFY_KEY,
+                    db,
+                    isDarkTheme,
+                    onToggleTheme = { isDarkTheme = !isDarkTheme })
             }
         }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AndroidColor.TRANSPARENT
     }
-
     fun ensureLocationPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(
@@ -260,8 +133,6 @@ class MainActivity : ComponentActivity() {
             )
         }
     }
-
-    // Helper to get last known location (with permission check)
     suspend fun getCurrentLocation(): Location? = suspendCancellableCoroutine { cont ->
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             cont.resume(null)
@@ -273,8 +144,6 @@ class MainActivity : ComponentActivity() {
             cont.resumeWithException(e)
         }
     }
-
-    // Helper to reverse geocode lat/lon to city name using Geoapify
     suspend fun getCityNameFromLocation(lat: Double, lon: Double, apiKey: String): String? {
         return try {
             val results = com.nikita.travelguide.network.Network.api.geocode("$lat,$lon", apiKey)
@@ -314,18 +183,15 @@ fun MainScreenWithTheme(apiKey: String, db: TravelGuideDatabase, isDarkTheme: Bo
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current as? MainActivity
 
-    // Load favorites and recent searches from DB on start
     LaunchedEffect(Unit) {
         favorites = withContext(Dispatchers.IO) { db.favoritePoiDao().getAll() }
         recentSearches = withContext(Dispatchers.IO) { db.recentSearchDao().getAll().map { it.searchTerm } }
     }
 
-    // When triggerSearch is set, perform the search and add to recent
     LaunchedEffect(triggerSearch) {
         if (triggerSearch) {
             vm.fetch(city, apiKey)
             if (city.isNotBlank() && !recentSearches.contains(city)) {
-                // Add to DB and state
                 scope.launch {
                     withContext(Dispatchers.IO) {
                         db.recentSearchDao().insert(RecentSearch(searchTerm = city, timestamp = System.currentTimeMillis()))

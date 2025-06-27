@@ -4,11 +4,8 @@ import com.nikita.travelguide.data.Results
 import retrofit2.http.GET
 import retrofit2.http.Query
 
-/* ---------- generic wrapper ---------- */
 data class FeatureCollection<T>(val features: List<T>)
 
-
-/* ---------- places feature (!! new) ---------- */
 data class PoiFeature(
     val properties: PoiProps,
     val geometry: Geometry
@@ -26,7 +23,7 @@ interface GeoapifyService {
     @GET("v1/geocode/search?format=json")
     suspend fun geocode(
         @Query("text")     city: String,
-        @Query("apiKey")   key:  String           // ← parameter name is **key**
+        @Query("apiKey")   key:  String
     ): Results
 
     @GET("v2/places")

@@ -14,7 +14,7 @@ object Network {
             .build()
 
         Retrofit.Builder()
-            .baseUrl("https://api.geoapify.com/")          // 👈 new base URL
+            .baseUrl("https://api.geoapify.com/")
             .addConverterFactory(MoshiConverterFactory.create(moshi))
             .client(
                 OkHttpClient.Builder()

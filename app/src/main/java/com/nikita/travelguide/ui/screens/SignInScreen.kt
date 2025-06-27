@@ -15,7 +15,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -29,7 +28,7 @@ fun SignInScreen(onSignInSuccess: (FirebaseUser) -> Unit, darkTheme: Boolean) {
     var isRegistering by remember { mutableStateOf(false) }
     var passwordVisible by remember { mutableStateOf(false) }
 
-    GradientBackground(darkTheme = darkTheme) {
+    MainBackground(darkTheme = darkTheme) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
