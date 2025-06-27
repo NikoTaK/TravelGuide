@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 fun AppEntry(apiKey: String, db: TravelGuideDatabase) {
     var showSplash by remember { mutableStateOf(true) }
     var user by remember { mutableStateOf<FirebaseUser?>(null) }
+    var isDarkTheme by remember { mutableStateOf(false) }
 
     // Splash logic
     LaunchedEffect(Unit) {
@@ -32,7 +33,7 @@ fun AppEntry(apiKey: String, db: TravelGuideDatabase) {
 
     when {
         showSplash -> SplashScreen()
-        user == null -> SignInScreen(onSignInSuccess = { user = it })
+        user == null -> SignInScreen(onSignInSuccess = { user = it }, darkTheme = isDarkTheme)
         else -> MainScreen(apiKey, db)
     }
 } 
